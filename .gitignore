@@ -1,0 +1,20 @@
+# Build output
+bin/
+maind
+
+# Database
+*.db
+*.sqlite
+
+# Local data
+.maind/
+
+# IDE / editor
+.cursor/
+.cursorrules
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
