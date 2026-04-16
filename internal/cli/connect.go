@@ -14,39 +14,28 @@ var connectCmd = &cobra.Command{
 	Long: `Generate integration rules so your AI assistant uses Maind as persistent memory.
 
 Supported tools:
-  cursor    — creates .cursor/rules/maind.mdc in the current project
-  claude    — creates CLAUDE.md in the current project
+  cursor    — .cursor/rules/maind.mdc
+  claude    — CLAUDE.md
+  windsurf  — .windsurfrules
+  copilot   — .github/copilot-instructions.md
+  aider     — CONVENTIONS.md
+  generic   — .maind/rules.md + instructions for any other tool
 
 Examples:
   maind connect cursor
-  maind connect claude`,
+  maind connect claude
+  maind connect generic`,
 	Args:      cobra.ExactArgs(1),
-	ValidArgs: []string{"cursor", "claude"},
+	ValidArgs: []string{"cursor", "claude", "windsurf", "copilot", "aider", "generic"},
 	RunE:      runConnect,
 }
 
 func runConnect(cmd *cobra.Command, args []string) error {
 	tool := args[0]
 
-	switch tool {
-	case "cursor":
-		return connectCursor()
-	case "claude":
-		return connectClaude()
-	default:
-		return fmt.Errorf("unknown tool %q — supported: cursor, claude", tool)
-	}
-}
-
-func connectCursor() error {
-	if err := os.MkdirAll(".cursor/rules", 0755); err != nil {
-		return fmt.Errorf("create rules directory: %w", err)
-	}
 	if err := os.MkdirAll(".maind", 0755); err != nil {
 		return fmt.Errorf("create .maind directory: %w", err)
 	}
-
-	os.WriteFile(filepath.Join(".cursor", "rules", "maind.mdc"), []byte(cursorRule), 0644)
 
 	s, err := openStore()
 	if err == nil {
@@ -55,48 +44,73 @@ func connectCursor() error {
 		s.Close()
 	}
 
+	switch tool {
+	case "cursor":
+		return connectCursor()
+	case "claude":
+		return connectClaude()
+	case "windsurf":
+		return connectWindsurf()
+	case "copilot":
+		return connectCopilot()
+	case "aider":
+		return connectAider()
+	case "generic":
+		return connectGeneric()
+	default:
+		return fmt.Errorf("unknown tool %q — run 'maind connect generic' for unsupported tools", tool)
+	}
+}
+
+func writeRuleFile(path, content string) error {
+	dir := filepath.Dir(path)
+	if dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("create directory %s: %w", dir, err)
+		}
+	}
+	return os.WriteFile(path, []byte(content), 0644)
+}
+
+func appendRuleFile(path, content string) error {
+	existing := ""
+	if data, err := os.ReadFile(path); err == nil {
+		existing = string(data)
+	}
+	out := existing
+	if out != "" && out[len(out)-1] != '\n' {
+		out += "\n"
+	}
+	out += content
+	return os.WriteFile(path, []byte(out), 0644)
+}
+
+func printConnected(tool, file string, notes ...string) {
+	abs, _ := filepath.Abs(file)
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "  Maind connected to Cursor.")
+	fmt.Fprintf(os.Stderr, "  Maind connected to %s.\n", tool)
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "    Rules:   .cursor/rules/maind.mdc\n")
+	fmt.Fprintf(os.Stderr, "    Rules:   %s\n", abs)
 	fmt.Fprintf(os.Stderr, "    Context: .maind/context.md (refreshed by dashboard)\n")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "  The AI will:")
 	fmt.Fprintln(os.Stderr, "    - Read .maind/context.md at session start")
 	fmt.Fprintln(os.Stderr, "    - Run 'maind remember' to store memories directly")
 	fmt.Fprintln(os.Stderr, "    - Run 'maind recall' to search when needed")
+	for _, n := range notes {
+		fmt.Fprintf(os.Stderr, "\n  %s\n", n)
+	}
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "  Allowlist 'maind' once when prompted, then it's seamless.")
-	fmt.Fprintln(os.Stderr)
-	return nil
 }
 
-func connectClaude() error {
-	path := "CLAUDE.md"
+// --- Cursor ---
 
-	existing := ""
-	if data, err := os.ReadFile(path); err == nil {
-		existing = string(data)
+func connectCursor() error {
+	path := filepath.Join(".cursor", "rules", "maind.mdc")
+	if err := writeRuleFile(path, cursorRule); err != nil {
+		return err
 	}
-
-	content := existing
-	if content != "" && content[len(content)-1] != '\n' {
-		content += "\n"
-	}
-	content += claudeRule
-
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		return fmt.Errorf("write CLAUDE.md: %w", err)
-	}
-
-	abs, _ := filepath.Abs(path)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "  Maind connected to Claude Code.")
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "    File: %s\n", abs)
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "  Claude will now use Maind as persistent memory.")
-	fmt.Fprintln(os.Stderr)
+	printConnected("Cursor", path, "Allowlist 'maind' once when prompted, then it's seamless.")
 	return nil
 }
 
@@ -105,15 +119,106 @@ description: "Maind — persistent developer memory"
 globs: "**/*"
 alwaysApply: true
 ---
+` + maindRuleBody
 
-# Maind — Your Persistent Memory
+// --- Claude Code ---
+
+func connectClaude() error {
+	path := "CLAUDE.md"
+	if err := appendRuleFile(path, claudeRule); err != nil {
+		return err
+	}
+	printConnected("Claude Code", path)
+	return nil
+}
+
+const claudeRule = "\n" + maindRuleBody
+
+// --- Windsurf ---
+
+func connectWindsurf() error {
+	path := ".windsurfrules"
+	if err := appendRuleFile(path, windsurfRule); err != nil {
+		return err
+	}
+	printConnected("Windsurf", path)
+	return nil
+}
+
+const windsurfRule = "\n" + maindRuleBody
+
+// --- GitHub Copilot ---
+
+func connectCopilot() error {
+	path := filepath.Join(".github", "copilot-instructions.md")
+	if err := writeRuleFile(path, copilotRule); err != nil {
+		return err
+	}
+	printConnected("GitHub Copilot", path)
+	return nil
+}
+
+const copilotRule = maindRuleBody
+
+// --- Aider ---
+
+func connectAider() error {
+	path := "CONVENTIONS.md"
+	if err := appendRuleFile(path, aiderRule); err != nil {
+		return err
+	}
+	printConnected("Aider", path)
+	return nil
+}
+
+const aiderRule = "\n" + maindRuleBody
+
+// --- Generic (any tool) ---
+
+func connectGeneric() error {
+	path := filepath.Join(".maind", "rules.md")
+	if err := writeRuleFile(path, maindRuleBody); err != nil {
+		return err
+	}
+
+	abs, _ := filepath.Abs(path)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "  Maind rules generated.")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintf(os.Stderr, "    File: %s\n", abs)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "  To connect an unsupported AI tool:")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "    1. Find where your tool reads system/project instructions.")
+	fmt.Fprintln(os.Stderr, "       Common locations:")
+	fmt.Fprintln(os.Stderr, "         - A rules/instructions file in the project root")
+	fmt.Fprintln(os.Stderr, "         - A system prompt or custom instructions setting")
+	fmt.Fprintln(os.Stderr, "         - A config file that supports injecting context")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "    2. Copy the contents of .maind/rules.md into that location,")
+	fmt.Fprintln(os.Stderr, "       or point the tool to read .maind/rules.md directly.")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "    3. Make sure the AI can run shell commands (maind remember/recall).")
+	fmt.Fprintln(os.Stderr, "       If it can't, the AI can still read .maind/context.md for context.")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "  The rules tell the AI to:")
+	fmt.Fprintln(os.Stderr, "    - Read .maind/context.md at session start")
+	fmt.Fprintln(os.Stderr, "    - Run 'maind remember' to store memories")
+	fmt.Fprintln(os.Stderr, "    - Run 'maind recall' to search")
+	fmt.Fprintln(os.Stderr)
+	return nil
+}
+
+// --- Shared rule body ---
+
+const maindRuleBody = `# Maind — Your Persistent Memory
 
 You have persistent memory via Maind. It stores decisions, bugs, solutions,
 context, and learnings across all sessions. Treat it as YOUR memory.
 
 ## On session start — read your memories
 
-Your FIRST action must be to read this file with the Read tool:
+Your FIRST action must be to read this file:
 
     .maind/context.md
 
@@ -155,31 +260,4 @@ maind recall "search query"
 
 Use specific, searchable tags: "auth,jwt,refresh-tokens" not just "backend".
 Use --project to scope memories to the current project when relevant.
-`
-
-const claudeRule = `
-## Maind — Persistent Developer Memory
-
-You have access to ` + "`maind`" + `, a CLI tool that acts as persistent developer memory.
-Use it to recall prior context and store new decisions, solutions, and learnings.
-
-### Start of session
-` + "```bash" + `
-maind recall "<relevant keywords>"
-` + "```" + `
-
-### When decisions/bugs/solutions happen
-` + "```bash" + `
-maind remember "description" --kind decision --tags tag1,tag2 --importance 7
-maind remember "bug and fix" --kind solution --tags tag1 --importance 8
-maind remember "insight" --kind learning --tags tag1 --importance 6
-` + "```" + `
-
-### Commands: remember, recall, list, show, link, tags, forget
-### Kinds: note, decision, bug, solution, context, snippet, learning
-### Relations: relates_to, caused_by, supersedes, solved_by, depends_on, part_of, derived_from
-
-Always check for prior context before starting work.
-Always store meaningful decisions and solutions.
-Do not store trivial actions.
 `

@@ -81,8 +81,12 @@ Maind can integrate with AI coding assistants so they use your memory automatica
 
 ```bash
 # In your project directory:
-maind connect cursor    # generates .cursor/rules/maind.mdc
-maind connect claude    # appends to CLAUDE.md
+maind connect cursor      # .cursor/rules/maind.mdc
+maind connect claude      # CLAUDE.md
+maind connect windsurf    # .windsurfrules
+maind connect copilot     # .github/copilot-instructions.md
+maind connect aider       # CONVENTIONS.md
+maind connect generic     # .maind/rules.md + instructions for any other tool
 ```
 
 With the dashboard running, your AI assistant will:
@@ -106,7 +110,7 @@ Allowlist `maind` once when prompted, then it's seamless.
 | `maind link [from] [to]` | Create a link between memories |
 | `maind tags` | List all tags with entry counts |
 | `maind export` | Export all memories as JSON |
-| `maind connect [tool]` | Wire Maind into AI tools (cursor, claude) |
+| `maind connect [tool]` | Wire Maind into AI tools (cursor, claude, windsurf, copilot, aider, generic) |
 | `maind unlock` | Unlock encryption for this session |
 | `maind lock` | Lock encryption, clear session key |
 | `maind shell` | Start an interactive REPL session |
