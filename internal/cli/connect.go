@@ -265,30 +265,60 @@ Use --project to scope memories to the current project when relevant.
 ## Deep scan protocol
 
 When the user says "scan" or "scan this project", run the full scan protocol.
-This is a tracked session — your reasoning and findings are recorded.
+This is a tracked session. Your chain of thought IS the log — explain WHY you
+look at something, WHAT you conclude, and WHY it matters before storing it.
 
-1. Start the scan:
+IMPORTANT: Batch ALL maind commands in a SINGLE shell call using && to avoid
+repeated permission prompts. The user should approve ONCE, not per command.
+
+### Step 0 — Check session
+
+Before anything, verify the session is active:
 ` + "```bash" + `
-maind scan start --project <project-name> --source ide --thought "Starting analysis of <project-name>"
+maind status
 ` + "```" + `
-   Save the returned scan ID.
+If it prints "locked" or "not_initialized", STOP. Tell the user:
+"Start the Maind dashboard first (run maind in a terminal) then ask me again."
+Do NOT proceed with a locked session.
 
-2. As you analyze, log your observations:
+### Step 1 — Start the scan
+
 ` + "```bash" + `
-maind scan log <scan-id> "Found X pattern in Y — relevant because Z"
+maind scan start --project <project-name> --source ide --thought "Starting: analyzing structure, deps, and patterns"
 ` + "```" + `
+Save the returned scan ID (last line of stdout).
 
-3. Store each finding as a memory linked to the scan:
+### Step 2 — Analyze, think, and store in batches
+
+Read the codebase first (structure, config, entry points, deps, git log).
+Then batch your thoughts and findings into ONE shell call per analysis pass:
+
 ` + "```bash" + `
-maind remember "description" --kind <kind> --tags tag1,tag2 --importance <1-10> --source ide --scan <scan-id>
+maind scan log <ID> "Looking at go.mod: 14 deps, none pinned. This is risky for reproducible builds." && \
+maind scan log <ID> "Found 3 SQL migrations but no rollback files. Recovery from bad deploys is impossible." && \
+maind remember "No dependency version pinning in go.mod — risk of breaking builds" --kind bug --tags deps,go --importance 7 --source ide --scan <ID> && \
+maind remember "SQL migrations have no rollback path" --kind bug --tags database,migration --importance 8 --source ide --scan <ID>
 ` + "```" + `
 
-4. When done, close the scan:
+Your scan logs MUST capture your reasoning, not just facts:
+- BAD:  "Found JWT auth"
+- GOOD: "Auth uses JWT with refresh tokens. Chose this over sessions because the API is stateless and serves mobile clients. Token rotation is in middleware/auth.go."
+
+Think out loud. Every log entry should explain what you looked at, what you found,
+why it matters, and what you decided to do about it.
+
+### Step 3 — Complete the scan
+
 ` + "```bash" + `
-maind scan complete <scan-id> --summary "Found N decisions, M patterns, K issues"
+maind scan complete <ID> --summary "Analyzed <project>: found N decisions, M issues, K patterns"
 ` + "```" + `
 
-What to scan: architecture decisions, dependency choices, non-obvious patterns,
+### What to look for
+
+Read project structure, config files, READMEs, dependency manifests, entry points,
+and recent git history. Use your understanding to identify what matters.
+
+Store: architecture decisions, dependency choices, non-obvious patterns,
 known bugs or tech debt, deployment/infra setup, testing strategy, security concerns.
 Skip trivial config and boilerplate. Focus on what a new developer or future-you needs to know.
 `

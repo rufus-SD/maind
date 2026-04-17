@@ -88,7 +88,11 @@ Once connected, the AI treats Maind as its own memory. Decisions get stored. Bug
 
 ## Deep scan
 
-Tell your AI to **scan a project** and it will analyze the codebase, log its reasoning, and populate your memory with what matters — architecture decisions, dependency choices, known issues, patterns.
+With the dashboard running and an AI connected, just tell it:
+
+> **"scan this project"**
+
+The AI will analyze the codebase, log its reasoning, and populate your memory with what matters — architecture decisions, dependency choices, known issues, patterns.
 
 Every scan is a tracked session. From the dashboard:
 

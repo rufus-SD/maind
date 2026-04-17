@@ -57,6 +57,7 @@ func init() {
 	rootCmd.AddCommand(unlockCmd)
 	rootCmd.AddCommand(lockCmd)
 	rootCmd.AddCommand(scanCmd)
+	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(shellCmd)
 	rootCmd.AddCommand(versionCmd)
 }
