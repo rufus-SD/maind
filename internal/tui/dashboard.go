@@ -151,6 +151,7 @@ func (m *Model) handleCommand(line string) {
 			"  tags                  List tags",
 			"  link <from> <to>      Link memories",
 			"  forget <id>           Archive",
+			"  scan [list|show <id>] Review AI scans",
 			"  exit                  Lock and exit",
 		}
 
@@ -285,8 +286,126 @@ func (m *Model) handleCommand(line string) {
 		m.store.LogActivity("ARCHIVE", parts[1], parts[1])
 		m.output = []string{fmt.Sprintf("  Archived [%s]", parts[1])}
 
+	case "scan", "scans":
+		m.handleScan(parts[1:])
+
 	default:
 		m.output = []string{fmt.Sprintf("  Unknown: %s (type 'help')", parts[0])}
+	}
+}
+
+func (m *Model) handleScan(args []string) {
+	sub := "list"
+	if len(args) > 0 {
+		sub = args[0]
+	}
+
+	switch sub {
+	case "list", "ls":
+		scans, err := m.store.ListScans(10)
+		if err != nil {
+			m.output = []string{fmt.Sprintf("  Error: %v", err)}
+			return
+		}
+		if len(scans) == 0 {
+			m.output = []string{
+				"  No scans yet.",
+				"",
+				"  Tell your AI: \"scan this project\" — it knows the protocol.",
+			}
+			return
+		}
+		m.output = nil
+		for _, sc := range scans {
+			status := sc.Status
+			switch status {
+			case "running":
+				status = "RUNNING"
+			case "completed":
+				status = "DONE   "
+			case "failed":
+				status = "FAILED "
+			}
+			date := sc.StartedAt.Local().Format("01-02 15:04")
+			dur := ""
+			if sc.CompletedAt != nil {
+				d := sc.CompletedAt.Sub(sc.StartedAt)
+				if d.Seconds() < 60 {
+					dur = fmt.Sprintf(" %ds", int(d.Seconds()))
+				} else {
+					dur = fmt.Sprintf(" %dm", int(d.Minutes()))
+				}
+			}
+			line := fmt.Sprintf("  %s %s  %s  %-18s  %d entries%s",
+				actIDStyle.Render("["+shortID(sc.ID)+"]"),
+				status, date, sc.Project, sc.EntriesCreated, dur)
+			m.output = append(m.output, line)
+			if sc.Summary != "" {
+				m.output = append(m.output, fmt.Sprintf("         %s", trunc(sc.Summary, 60)))
+			}
+		}
+
+	case "show":
+		if len(args) < 2 {
+			m.output = []string{"  Usage: scan show <id>"}
+			return
+		}
+		scan, err := m.store.GetScan(args[1])
+		if err != nil {
+			m.output = []string{fmt.Sprintf("  Error: %v", err)}
+			return
+		}
+		m.output = []string{
+			fmt.Sprintf("  Scan %s", actIDStyle.Render("["+shortID(scan.ID)+"]")),
+			fmt.Sprintf("  Project:  %s", scan.Project),
+			fmt.Sprintf("  Source:   %s", scan.Source),
+			fmt.Sprintf("  Status:   %s", strings.ToUpper(scan.Status)),
+			fmt.Sprintf("  Started:  %s", scan.StartedAt.Local().Format("2006-01-02 15:04:05")),
+		}
+		if scan.CompletedAt != nil {
+			m.output = append(m.output, fmt.Sprintf("  Finished: %s", scan.CompletedAt.Local().Format("2006-01-02 15:04:05")))
+			d := scan.CompletedAt.Sub(scan.StartedAt)
+			m.output = append(m.output, fmt.Sprintf("  Duration: %s", d.Round(1e9)))
+		}
+		m.output = append(m.output, fmt.Sprintf("  Entries:  %d", scan.EntriesCreated))
+
+		if scan.Summary != "" {
+			if scan.SummaryEncrypted {
+				m.output = append(m.output, "", "  Summary: [encrypted]")
+			} else {
+				m.output = append(m.output, "", "  Summary: "+scan.Summary)
+			}
+		}
+		if scan.Thoughts != "" {
+			if scan.ThoughtsEncrypted {
+				m.output = append(m.output, "", "  Thoughts: [encrypted]")
+			} else {
+				m.output = append(m.output, "", "  Thought log:")
+				for _, line := range strings.Split(scan.Thoughts, "\n") {
+					m.output = append(m.output, "    "+line)
+				}
+			}
+		}
+
+		entries, err := m.store.ScanEntries(scan.ID)
+		if err == nil && len(entries) > 0 {
+			m.output = append(m.output, "", "  Memories created:")
+			for _, e := range entries {
+				body := trunc(e.Body, 50)
+				if e.BodyEncrypted {
+					body = "[encrypted]"
+				}
+				m.output = append(m.output, fmt.Sprintf("    %s %s — %s",
+					actIDStyle.Render("["+shortID(e.ID)+"]"), string(e.Kind), body))
+			}
+		}
+
+	default:
+		m.output = []string{
+			"  scan             List recent scans",
+			"  scan list        List recent scans",
+			"  scan show <id>   Show scan details + thought log",
+		}
 	}
 }
 
@@ -315,16 +434,35 @@ func (m Model) View() string {
 		m.stats.Entries, m.stats.Tags, m.stats.Links,
 	)
 
+	usable := m.height - 10
+	if usable < 6 {
+		usable = 6
+	}
+
+	outLines := len(m.output)
+	maxOut := 0
+	maxAct := usable
+	if outLines > 0 {
+		maxOut = usable * 2 / 3
+		if maxOut < 5 {
+			maxOut = 5
+		}
+		if maxOut > outLines {
+			maxOut = outLines
+		}
+		maxAct = usable - maxOut
+		if maxAct < 3 {
+			maxAct = 3
+		}
+	}
+
 	// Activity
 	actLines := []string{}
-	maxAct := (m.height - 14) / 2
-	if maxAct < 3 {
-		maxAct = 3
+	shown := maxAct
+	if shown > len(m.activities) {
+		shown = len(m.activities)
 	}
-	if maxAct > len(m.activities) {
-		maxAct = len(m.activities)
-	}
-	for i := maxAct - 1; i >= 0; i-- {
+	for i := shown - 1; i >= 0; i-- {
 		a := m.activities[i]
 		ts := actTimeStyle.Render(a.CreatedAt.Local().Format("15:04:05"))
 		action := actActionStyle.Render(a.Action)
@@ -346,16 +484,17 @@ func (m Model) View() string {
 
 	// Output
 	outSection := ""
-	if len(m.output) > 0 {
-		maxOut := (m.height - 14) / 2
-		if maxOut < 3 {
-			maxOut = 3
-		}
+	if outLines > 0 {
 		lines := m.output
+		truncated := false
 		if len(lines) > maxOut {
 			lines = lines[:maxOut]
+			truncated = true
 		}
 		outSection = "\n" + dimStyle.Render("  ── Output ──") + "\n" + outputStyle.Render(strings.Join(lines, "\n"))
+		if truncated {
+			outSection += "\n" + dimStyle.Render(fmt.Sprintf("  ... %d more lines (resize to see)", outLines-maxOut))
+		}
 	}
 
 	// Separator + input

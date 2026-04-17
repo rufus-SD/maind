@@ -30,6 +30,7 @@ var (
 	flagImportance int
 	flagProject    string
 	flagSource     string
+	flagScanID     string
 )
 
 func init() {
@@ -39,6 +40,7 @@ func init() {
 	rememberCmd.Flags().IntVarP(&flagImportance, "importance", "i", 5, "importance 0-10")
 	rememberCmd.Flags().StringVarP(&flagProject, "project", "p", "", "project context")
 	rememberCmd.Flags().StringVar(&flagSource, "source", "cli", "source (cli|import|git|ide|api)")
+	rememberCmd.Flags().StringVar(&flagScanID, "scan", "", "link this memory to a scan session")
 }
 
 func runRemember(cmd *cobra.Command, args []string) error {
@@ -79,6 +81,16 @@ func runRemember(cmd *cobra.Command, args []string) error {
 	if err := s.CreateEntry(entry); err != nil {
 		return fmt.Errorf("save memory: %w", err)
 	}
+
+	if flagScanID != "" {
+		resolved, err := s.ResolveScanID(flagScanID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not link to scan %s: %v\n", flagScanID, err)
+		} else if err := s.LinkEntryToScan(entry.ID, resolved); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not link to scan: %v\n", err)
+		}
+	}
+
 	s.LogActivity("STORE", fmt.Sprintf("%s: %s", entry.Kind, truncBody(entry.Body, 60)), entry.ID)
 
 	fmt.Fprintf(os.Stderr, "Saved [%s]\n", shortID(entry.ID))

@@ -70,6 +70,20 @@ type Link struct {
 	CreatedAt   time.Time    `json:"created_at"`
 }
 
+type Scan struct {
+	ID                string     `json:"id"`
+	Project           string     `json:"project"`
+	Source            string     `json:"source"`
+	Status            string     `json:"status"`
+	Summary           string     `json:"summary,omitempty"`
+	SummaryEncrypted  bool       `json:"summary_encrypted"`
+	Thoughts          string     `json:"thoughts,omitempty"`
+	ThoughtsEncrypted bool       `json:"thoughts_encrypted"`
+	EntriesCreated    int        `json:"entries_created"`
+	StartedAt         time.Time  `json:"started_at"`
+	CompletedAt       *time.Time `json:"completed_at,omitempty"`
+}
+
 type Export struct {
 	Version    int       `json:"version"`
 	Entries    []Entry   `json:"entries"`

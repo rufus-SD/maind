@@ -97,6 +97,7 @@ func printConnected(tool, file string, notes ...string) {
 	fmt.Fprintln(os.Stderr, "    - Read .maind/context.md at session start")
 	fmt.Fprintln(os.Stderr, "    - Run 'maind remember' to store memories directly")
 	fmt.Fprintln(os.Stderr, "    - Run 'maind recall' to search when needed")
+	fmt.Fprintln(os.Stderr, "    - Run 'maind scan' on request to deep-analyze a project")
 	for _, n := range notes {
 		fmt.Fprintf(os.Stderr, "\n  %s\n", n)
 	}
@@ -260,4 +261,34 @@ maind recall "search query"
 
 Use specific, searchable tags: "auth,jwt,refresh-tokens" not just "backend".
 Use --project to scope memories to the current project when relevant.
+
+## Deep scan protocol
+
+When the user says "scan" or "scan this project", run the full scan protocol.
+This is a tracked session — your reasoning and findings are recorded.
+
+1. Start the scan:
+` + "```bash" + `
+maind scan start --project <project-name> --source ide --thought "Starting analysis of <project-name>"
+` + "```" + `
+   Save the returned scan ID.
+
+2. As you analyze, log your observations:
+` + "```bash" + `
+maind scan log <scan-id> "Found X pattern in Y — relevant because Z"
+` + "```" + `
+
+3. Store each finding as a memory linked to the scan:
+` + "```bash" + `
+maind remember "description" --kind <kind> --tags tag1,tag2 --importance <1-10> --source ide --scan <scan-id>
+` + "```" + `
+
+4. When done, close the scan:
+` + "```bash" + `
+maind scan complete <scan-id> --summary "Found N decisions, M patterns, K issues"
+` + "```" + `
+
+What to scan: architecture decisions, dependency choices, non-obvious patterns,
+known bugs or tech debt, deployment/infra setup, testing strategy, security concerns.
+Skip trivial config and boilerplate. Focus on what a new developer or future-you needs to know.
 `

@@ -1,141 +1,188 @@
-# Maind
+<div align="center">
 
-**Your second brain — persistent developer memory.**
+# maind
 
-Maind is a local CLI tool that acts as a global, persistent memory for developers. It stores decisions, bugs, solutions, context, and learnings across all your projects and sessions. Your data stays local, encrypted, and private.
+**Your local, encrypted, persistent developer memory.**
 
-## Features
+Store decisions, bugs, solutions, and context across all your projects.
+Private by design. No cloud. No accounts. Just your brain, extended.
 
-- **Persistent memory** — store and recall knowledge across projects and sessions
-- **Encryption at rest** — AES-256-GCM with Argon2id key derivation; passphrase verified on every unlock
-- **Full-text search** — FTS5-powered search across titles, bodies, and tags
-- **Live dashboard** — TUI with real-time activity monitoring and session management
-- **AI integration** — connect to Cursor, Claude Code, or any AI assistant so they remember too
-- **Single binary** — no runtime dependencies, no cloud, no external database
-- **Linked knowledge** — connect related memories with typed relationships
+[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go&logoColor=white)](https://go.dev)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/rufus-SD/maind/actions/workflows/ci.yml/badge.svg)](https://github.com/rufus-SD/maind/actions)
+
+</div>
+
+---
+
+```
+  MAIND  — krnl
+  encrypted · unlocked · 42 memories · 18 tags · 7 links
+
+  ── Activity ──
+  10:32:15  STORE     decision: Use JWT with refresh tokens [a3f8c912]
+  10:31:02  RECALL    "auth strategy" → 3 found
+  10:28:44  SCAN_DONE entries=12 project=myapp [0f4f4f98]
+  10:15:33  STORE     solution: Fixed OOM with streaming parser [b7e2d1a0]
+
+  ──────────────────────────────────────────────
+  maind>
+```
+
+## Why Maind?
+
+You solve a gnarly bug. You make an architecture decision. You discover a pattern.
+Two weeks later — gone. Buried in Slack, lost in git history, forgotten.
+
+Maind captures that knowledge **once** and makes it available **forever** — to you and to your AI tools.
+
+- Works across every project on your machine
+- Encrypted at rest (AES-256-GCM + Argon2id)
+- AI assistants read and write to it automatically
+- Single binary, zero dependencies, fully offline
 
 ## Install
 
-### From source (requires Go 1.21+)
-
 ```bash
+# From source (Go 1.21+)
 go install github.com/rufus-SD/maind@latest
-```
 
-### Build from repo
-
-```bash
+# Or clone and build
 git clone https://github.com/rufus-SD/maind.git
-cd maind
-make install
+cd maind && make install
 ```
 
-## Quick start
+## Get started in 60 seconds
 
 ```bash
-# Initialize your brain (guided setup)
+# 1. Initialize — pick a name, enable encryption
 maind init
 
-# Store a memory
-maind remember "Use context.WithTimeout for all DB calls" --kind decision --tags go,database --importance 7
+# 2. Store something
+maind remember "Always use context.WithTimeout for DB calls" \
+  --kind decision --tags go,database --importance 7
 
-# Search your memories
+# 3. Find it later
 maind recall "database timeout"
 
-# List recent memories
-maind list
-
-# Start the live dashboard (manages encryption session)
+# 4. Launch the dashboard
 maind
 ```
 
-## Encryption
+The dashboard manages your encryption session — enter your passphrase once, work freely, it locks when you exit.
 
-Maind encrypts all memory content at rest using **AES-256-GCM**. The encryption key is derived from your passphrase using **Argon2id** (3 iterations, 64 MB memory, 4 threads).
+## Connect your AI
 
-### Session model
-
-When you start the dashboard (`maind`), you enter your passphrase once. A session key is cached locally (readable only by your user, expires in 12 hours). While the session is active, all commands work without re-prompting:
-
-```
-maind              # start dashboard, enter passphrase → session unlocked
-maind remember ... # uses session key, no prompt
-maind recall ...   # uses session key, no prompt
-exit               # dashboard exits → session key deleted, locked
-```
-
-You can also manage sessions manually:
+One command wires Maind into your AI assistant. It will read your memories at session start, store new ones silently, and search when it needs context.
 
 ```bash
-maind unlock       # enter passphrase, cache session key
-maind lock         # delete session key
+maind connect cursor      # Cursor IDE
+maind connect claude      # Claude Code
+maind connect windsurf    # Windsurf
+maind connect copilot     # GitHub Copilot
+maind connect aider       # Aider
+maind connect generic     # Any other tool — generates rules + instructions
 ```
 
-### Passphrase verification
+Once connected, the AI treats Maind as its own memory. Decisions get stored. Bugs get logged. Context carries across sessions — without you lifting a finger.
 
-Maind stores an encrypted verification token during setup. On every unlock, it checks the token — a wrong passphrase is rejected immediately instead of silently encrypting data with the wrong key.
+## Deep scan
 
-## AI integration
+Tell your AI to **scan a project** and it will analyze the codebase, log its reasoning, and populate your memory with what matters — architecture decisions, dependency choices, known issues, patterns.
 
-Maind can integrate with AI coding assistants so they use your memory automatically.
+Every scan is a tracked session. From the dashboard:
 
-```bash
-# In your project directory:
-maind connect cursor      # .cursor/rules/maind.mdc
-maind connect claude      # CLAUDE.md
-maind connect windsurf    # .windsurfrules
-maind connect copilot     # .github/copilot-instructions.md
-maind connect aider       # CONVENTIONS.md
-maind connect generic     # .maind/rules.md + instructions for any other tool
+```
+maind> scan
+  [0f4f4f98] DONE  04-17 10:28  myapp        12 entries  3m
+         Found 8 architectural decisions, 3 tech debt items, 1 security concern
+
+maind> scan show 0f4f
+  Scan [0f4f4f98]
+  Project:  myapp
+  Status:   COMPLETED
+  Duration: 3m12s
+  Entries:  12
+
+  Thought log:
+    [10:25:23] Analyzing go.mod — 14 direct dependencies, no pinned versions
+    [10:26:01] Found 3 migration files with no rollback strategy
+    [10:27:15] README mentions Redis cache but no config found in deployment
+    ...
+
+  Memories created:
+    [a3f8c912] decision — JWT with refresh tokens for auth
+    [b7e2d1a0] bug — Migration 002 has no rollback path
+    ...
 ```
 
-With the dashboard running, your AI assistant will:
-- Read recent memories at session start
-- Store decisions, solutions, and learnings silently
-- Search your memory when relevant context is needed
-
-Allowlist `maind` once when prompted, then it's seamless.
+The AI does the thinking. Maind stores the results. You review when you want.
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `maind` | Start the live dashboard (TUI) |
-| `maind init` | Guided setup for your developer memory |
-| `maind remember [text]` | Store a new memory |
-| `maind recall [query]` | Search your memories |
-| `maind list` | List stored memories |
-| `maind show [id]` | Show full details of a memory |
-| `maind forget [id]` | Archive a memory (soft delete) |
-| `maind link [from] [to]` | Create a link between memories |
-| `maind tags` | List all tags with entry counts |
-| `maind export` | Export all memories as JSON |
-| `maind connect [tool]` | Wire Maind into AI tools (cursor, claude, windsurf, copilot, aider, generic) |
-| `maind unlock` | Unlock encryption for this session |
-| `maind lock` | Lock encryption, clear session key |
-| `maind shell` | Start an interactive REPL session |
-| `maind ingest` | Batch import from stdin (JSON lines) |
-| `maind version` | Print version |
+| Command | What it does |
+|---|---|
+| `maind` | Launch the live dashboard |
+| `maind init` | Guided setup wizard |
+| `maind remember "..."` | Store a memory |
+| `maind recall "..."` | Search memories |
+| `maind list` | List recent memories |
+| `maind show <id>` | Full detail view |
+| `maind forget <id>` | Archive (soft delete) |
+| `maind link <from> <to>` | Link related memories |
+| `maind tags` | List all tags |
+| `maind scan start/log/complete` | Manage scan sessions |
+| `maind scan list / show <id>` | Review past scans |
+| `maind connect <tool>` | Wire into an AI assistant |
+| `maind unlock / lock` | Manage encryption session |
+| `maind export` | Export as JSON |
+| `maind ingest` | Batch import (JSON lines) |
+| `maind shell` | Interactive REPL |
 
-### Memory kinds
+## Memory kinds
 
-`note`, `decision`, `bug`, `solution`, `context`, `snippet`, `learning`
+| Kind | Use for |
+|---|---|
+| `note` | General knowledge |
+| `decision` | Architecture / design choices |
+| `bug` | Known issues, gotchas |
+| `solution` | How you fixed something |
+| `context` | Background info that explains why |
+| `snippet` | Useful code patterns |
+| `learning` | Non-obvious things you figured out |
 
-### Link relations
+## How encryption works
 
-`relates_to`, `caused_by`, `supersedes`, `solved_by`, `depends_on`, `part_of`, `derived_from`
+All memory content is encrypted at rest using **AES-256-GCM**. The key is derived from your passphrase with **Argon2id** (3 iterations, 64 MB, 4 threads).
+
+```
+maind               → enter passphrase → session key cached (12h, user-only)
+maind remember ...  → uses cached key, no prompt
+maind recall ...    → uses cached key, no prompt
+exit                → session key deleted, brain locked
+```
+
+A verification token created during setup ensures wrong passphrases are rejected immediately — no silent corruption.
 
 ## Data storage
 
-All data is stored locally in a single SQLite database. Default locations:
+Everything lives in a single local SQLite database.
 
-| OS | Path |
-|----|------|
+| OS | Default path |
+|---|---|
 | macOS | `~/Library/Application Support/maind/` |
-| Linux | `~/.local/share/maind/` (or `$XDG_DATA_HOME/maind/`) |
+| Linux | `~/.local/share/maind/` |
 | Windows | `%APPDATA%/maind/` |
 
 Override with `--data-dir` or choose during `maind init`.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the encryption model and vulnerability reporting.
 
 ## License
 
