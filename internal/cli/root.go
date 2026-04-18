@@ -44,6 +44,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&flagDataDir, "data-dir", "", "data directory (default ~/.maind)")
 
 	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(demoCmd)
 	rootCmd.AddCommand(rememberCmd)
 	rootCmd.AddCommand(recallCmd)
 	rootCmd.AddCommand(listCmd)

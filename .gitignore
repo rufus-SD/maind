@@ -1,6 +1,13 @@
 # Build output
 bin/
+dist/
 maind
+
+# Python
+python/maind/maind
+!python/maind/__init__.py
+*.egg-info/
+__pycache__/
 
 # Database
 *.db

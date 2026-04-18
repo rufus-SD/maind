@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maind"
+version = "0.2.0"
+description = "Your AI forgets everything when you close the chat. Maind fixes that."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+authors = [{name = "rufus-SD"}]
+keywords = ["ai", "memory", "developer-tools", "cli", "encrypted"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Other",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/rufus-SD/maind"
+Repository = "https://github.com/rufus-SD/maind"
+Issues = "https://github.com/rufus-SD/maind/issues"
+
+[project.scripts]
+maind = "maind:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
