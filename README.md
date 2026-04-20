@@ -8,8 +8,10 @@ One CLI. Every decision, bug, and solution — stored, encrypted, permanent.
 Your AI tools plug in and remember across sessions. You never re-explain context again.
 
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go&logoColor=white)](https://go.dev)
+[![Python](https://img.shields.io/badge/pip_install-maind-3776AB?style=flat&logo=python&logoColor=white)](python/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/rufus-SD/maind/actions/workflows/ci.yml/badge.svg)](https://github.com/rufus-SD/maind/actions)
+[![Release](https://img.shields.io/github/v/release/rufus-SD/maind?style=flat)](https://github.com/rufus-SD/maind/releases)
 
 </div>
 
