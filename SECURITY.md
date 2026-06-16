@@ -9,6 +9,24 @@ Maind encrypts all memory content at rest using **AES-256-GCM** with keys derive
 - A verification token prevents silent encryption with a wrong passphrase
 - The SQLite database is local-only — no network calls, no telemetry, no cloud sync
 
+### What is encrypted vs. plaintext
+
+When encryption is enabled, only the **content** is encrypted:
+
+| Encrypted | Plaintext (metadata) |
+|-----------|----------------------|
+| Entry bodies | Titles, tags, kind, project, importance, timestamps |
+| Scan thoughts and summaries | Scan status, source, counts |
+
+Titles and tags are kept in plaintext so they can be indexed and searched
+without decrypting every row. **Do not put secrets in a title or tag** — treat
+them as labels, and keep sensitive material in the body. Encrypted bodies are
+searched by decrypting candidates in memory at query time.
+
+> Note: `maind export` and the per-project `.maind/context.md` file contain
+> **decrypted** content by design. `context.md` is written `0600` and a
+> `.maind/.gitignore` is generated to keep it out of version control.
+
 ## Reporting a vulnerability
 
 If you discover a security issue, please report it responsibly:
