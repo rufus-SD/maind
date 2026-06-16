@@ -36,6 +36,7 @@ func runConnect(cmd *cobra.Command, args []string) error {
 	if err := os.MkdirAll(".maind", 0755); err != nil {
 		return fmt.Errorf("create .maind directory: %w", err)
 	}
+	ensureMaindGitignore(".maind")
 
 	s, err := openStore()
 	if err == nil {
@@ -224,6 +225,20 @@ Your FIRST action must be to read this file:
     .maind/context.md
 
 This contains your recent memories from past sessions. Read it before anything else.
+
+## Check the session is unlocked
+
+Maind auto-locks after 15 minutes of inactivity, when you exit the dashboard, or
+when the session expires. Before relying on memory — and whenever a maind command
+reports an error — verify the session:
+
+` + "```bash" + `
+maind status
+` + "```" + `
+
+If it prints "locked" or "not_initialized", or any command reports "session expired",
+STOP using memory and tell the user to run 'maind' in a terminal to unlock it, then
+ask again. NEVER invent or guess memories when locked.
 
 ## Storing memories — use the CLI directly
 

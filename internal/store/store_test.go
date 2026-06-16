@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/rufus-SD/maind/internal/config"
@@ -201,6 +202,104 @@ func TestSearchEntries(t *testing.T) {
 	}
 	if results[0].Body != "use JWT for authentication" {
 		t.Errorf("first result = %q, want JWT entry", results[0].Body)
+	}
+}
+
+func TestSearchEntriesEncrypted(t *testing.T) {
+	key := testKey()
+	s := newTestStore(t, key)
+
+	s.CreateEntry(&model.Entry{
+		Kind:       model.KindDecision,
+		Body:       "Named the tool PRISMAG: one prompt splits into a spectrum of models",
+		Tags:       []string{"prismag", "naming"},
+		Importance: 8,
+		Source:     "cli",
+	})
+	s.CreateEntry(&model.Entry{
+		Kind: model.KindNote, Body: "grocery list for tomorrow", Importance: 2, Source: "cli",
+	})
+
+	// Body-word search must work even though the body is encrypted at rest.
+	results, err := s.SearchEntries("spectrum", SearchOptions{Limit: 10})
+	if err != nil {
+		t.Fatalf("SearchEntries: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("body-word search returned %d results, want 1", len(results))
+	}
+	if !strings.Contains(results[0].Body, "spectrum") {
+		t.Errorf("result body = %q, want the PRISMAG entry", results[0].Body)
+	}
+
+	// Multi-term search uses AND semantics across body/tags.
+	if r, _ := s.SearchEntries("prismag spectrum", SearchOptions{Limit: 10}); len(r) != 1 {
+		t.Errorf("multi-term search returned %d, want 1", len(r))
+	}
+
+	// A term that matches nothing returns no results.
+	if r, _ := s.SearchEntries("kubernetes", SearchOptions{Limit: 10}); len(r) != 0 {
+		t.Errorf("non-matching search returned %d, want 0", len(r))
+	}
+
+	// Tag filter still narrows results.
+	if r, _ := s.SearchEntries("spectrum", SearchOptions{Tag: "prismag", Limit: 10}); len(r) != 1 {
+		t.Errorf("tag-filtered search returned %d, want 1", len(r))
+	}
+}
+
+func TestReencrypt(t *testing.T) {
+	key1 := testKey()
+	dir := t.TempDir()
+	cfg := &config.Config{Version: 1, EncryptionEnabled: true, DBPath: "test.db"}
+
+	s1, err := New(cfg, dir, key1)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	s1.Migrate()
+	e := &model.Entry{
+		Kind: model.KindDecision, Body: "rotate me: spectrum of models",
+		Tags: []string{"prismag"}, Importance: 7, Source: "cli",
+	}
+	if err := s1.CreateEntry(e); err != nil {
+		t.Fatalf("CreateEntry: %v", err)
+	}
+
+	key2 := testKey()
+	if err := s1.Reencrypt(key2); err != nil {
+		t.Fatalf("Reencrypt: %v", err)
+	}
+	s1.Close()
+
+	// Reopen with the NEW key — content must decrypt and stay searchable.
+	s2, _ := New(cfg, dir, key2)
+	s2.Migrate()
+	got, err := s2.GetEntry(e.ID)
+	if err != nil {
+		t.Fatalf("GetEntry (new key): %v", err)
+	}
+	if got.Body != "rotate me: spectrum of models" {
+		t.Errorf("body = %q, want decrypted original", got.Body)
+	}
+	if r, _ := s2.SearchEntries("spectrum", SearchOptions{Limit: 10}); len(r) != 1 {
+		t.Errorf("search after rotation = %d, want 1", len(r))
+	}
+	s2.Close()
+
+	// Reopen with the OLD key — must NOT decrypt anymore.
+	s3, _ := New(cfg, dir, key1)
+	s3.Migrate()
+	defer s3.Close()
+	got3, err := s3.GetEntry(e.ID)
+	if err != nil {
+		t.Fatalf("GetEntry (old key): %v", err)
+	}
+	if got3.Body == "rotate me: spectrum of models" {
+		t.Error("old key still decrypts after rotation, want ciphertext")
+	}
+	if !got3.BodyEncrypted {
+		t.Error("BodyEncrypted = false with old key, want true")
 	}
 }
 

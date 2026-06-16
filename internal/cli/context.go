@@ -24,8 +24,10 @@ func refreshContextFile(s *store.Store, projectDir string) error {
 	}
 
 	var local, global []string
+	encryptedCount := 0
 	for _, e := range entries {
 		if e.BodyEncrypted {
+			encryptedCount++
 			continue
 		}
 		line := formatContextEntry(e)
@@ -60,12 +62,29 @@ func refreshContextFile(s *store.Store, projectDir string) error {
 	}
 
 	if len(local)+len(global) == 0 {
-		buf.WriteString("No readable memories. Is the session unlocked?\n")
+		if encryptedCount > 0 {
+			buf.WriteString("Session locked — run 'maind' in a terminal to unlock and load your memories.\n")
+		} else {
+			buf.WriteString("No memories stored yet.\n")
+		}
 	}
 
 	dir := filepath.Join(projectDir, ".maind")
 	os.MkdirAll(dir, 0755)
-	return os.WriteFile(filepath.Join(dir, "context.md"), []byte(buf.String()), 0644)
+	ensureMaindGitignore(dir)
+	// 0600: context.md holds DECRYPTED memory snippets, so it must not be
+	// world-readable even though the brain itself is encrypted at rest.
+	return os.WriteFile(filepath.Join(dir, "context.md"), []byte(buf.String()), 0600)
+}
+
+// ensureMaindGitignore writes a .gitignore inside the project's .maind directory
+// so decrypted context (and anything else maind drops there) is never committed.
+func ensureMaindGitignore(maindDir string) {
+	p := filepath.Join(maindDir, ".gitignore")
+	if _, err := os.Stat(p); err == nil {
+		return
+	}
+	os.WriteFile(p, []byte("# maind writes DECRYPTED memory context here — never commit it\n*\n"), 0600)
 }
 
 func formatContextEntry(e model.Entry) string {

@@ -174,6 +174,13 @@ func (s *Store) SearchEntries(query string, opts SearchOptions) ([]model.Entry, 
 		opts.Limit = 20
 	}
 
+	// Encrypted bodies are stored as ciphertext, so the FTS index and LIKE
+	// fallback can never match plaintext body content. When a key is present,
+	// search by decrypting candidate entries in memory and matching there.
+	if s.key != nil {
+		return s.searchDecrypted(query, opts)
+	}
+
 	ftsQuery := buildFTSQuery(query)
 
 	sqlQuery := `
@@ -540,6 +547,177 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// searchDecrypted matches the query against decrypted body, title, and tags.
+// Used when encryption is enabled, since ciphertext is unsearchable by FTS/LIKE.
+// Candidates are pulled with SQL filters applied, then decrypted and matched in
+// memory — fine at personal-memory scale, and it never indexes plaintext.
+func (s *Store) searchDecrypted(query string, opts SearchOptions) ([]model.Entry, error) {
+	sqlQuery := `
+		SELECT e.id, e.kind, e.title, e.body, e.body_encrypted, e.importance, e.source, e.project, e.created_at, e.updated_at, e.deleted_at
+		FROM entries e
+		WHERE e.deleted_at IS NULL`
+	var args []any
+	if opts.Kind != "" {
+		sqlQuery += " AND e.kind = ?"
+		args = append(args, opts.Kind)
+	}
+	if opts.Project != "" {
+		sqlQuery += " AND e.project = ?"
+		args = append(args, opts.Project)
+	}
+	sqlQuery += " ORDER BY e.importance DESC, e.created_at DESC"
+
+	rows, err := s.db.Query(sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("search (encrypted): %w", err)
+	}
+	defer rows.Close()
+
+	candidates, err := s.scanEntries(rows) // decrypts bodies and loads tags
+	if err != nil {
+		return nil, err
+	}
+
+	terms := strings.Fields(strings.ToLower(query))
+	var results []model.Entry
+	for _, e := range candidates {
+		if opts.Tag != "" && !hasTag(e.Tags, opts.Tag) {
+			continue
+		}
+		if matchesTerms(e, terms) {
+			results = append(results, e)
+			if len(results) >= opts.Limit {
+				break
+			}
+		}
+	}
+	return results, nil
+}
+
+// matchesTerms reports whether every term appears (substring, case-insensitive)
+// in the entry's decrypted body, title, or tags — AND semantics, mirroring the
+// space-separated FTS query behavior. An entry that failed to decrypt keeps its
+// ciphertext body and so won't match plaintext terms, which is the desired result.
+func matchesTerms(e model.Entry, terms []string) bool {
+	if len(terms) == 0 {
+		return false
+	}
+	hay := strings.ToLower(e.Body + " " + e.Title + " " + strings.Join(e.Tags, " "))
+	for _, t := range terms {
+		if !strings.Contains(hay, t) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasTag(tags []string, tag string) bool {
+	tag = strings.ToLower(strings.TrimSpace(tag))
+	for _, t := range tags {
+		if strings.ToLower(t) == tag {
+			return true
+		}
+	}
+	return false
+}
+
+type encRow struct {
+	id    string
+	value string
+}
+
+func (s *Store) collectEncRows(query string) ([]encRow, error) {
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []encRow
+	for rows.Next() {
+		var r encRow
+		if err := rows.Scan(&r.id, &r.value); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// Reencrypt re-encrypts every encrypted field (entry bodies, scan thoughts, scan
+// summaries) from the store's current key to newKey, atomically in one
+// transaction. The store must currently hold the old key. On success the store
+// adopts newKey. If any field can't be decrypted with the current key, the whole
+// operation aborts so no data is left in a mixed-key state.
+func (s *Store) Reencrypt(newKey []byte) error {
+	if s.key == nil {
+		return fmt.Errorf("encryption is not enabled; nothing to re-encrypt")
+	}
+	if newKey == nil {
+		return fmt.Errorf("new key is nil")
+	}
+
+	entryRows, err := s.collectEncRows("SELECT id, body FROM entries WHERE body_encrypted = 1")
+	if err != nil {
+		return err
+	}
+	thoughtRows, err := s.collectEncRows("SELECT id, thoughts FROM scans WHERE thoughts_encrypted = 1 AND thoughts IS NOT NULL AND thoughts != ''")
+	if err != nil {
+		return err
+	}
+	summaryRows, err := s.collectEncRows("SELECT id, summary FROM scans WHERE summary_encrypted = 1 AND summary IS NOT NULL AND summary != ''")
+	if err != nil {
+		return err
+	}
+
+	reEnc := func(ciphertext string) (string, error) {
+		plain, err := crypto.Decrypt(ciphertext, s.key)
+		if err != nil {
+			return "", fmt.Errorf("decrypt with current key failed (data may be under a different passphrase): %w", err)
+		}
+		return crypto.Encrypt(plain, newKey)
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, r := range entryRows {
+		v, err := reEnc(r.value)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec("UPDATE entries SET body = ? WHERE id = ?", v, r.id); err != nil {
+			return err
+		}
+	}
+	for _, r := range thoughtRows {
+		v, err := reEnc(r.value)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec("UPDATE scans SET thoughts = ? WHERE id = ?", v, r.id); err != nil {
+			return err
+		}
+	}
+	for _, r := range summaryRows {
+		v, err := reEnc(r.value)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec("UPDATE scans SET summary = ? WHERE id = ?", v, r.id); err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.key = newKey
+	return nil
 }
 
 func buildFTSQuery(input string) string {

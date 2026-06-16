@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
+	"github.com/rufus-SD/maind/internal/model"
 	"github.com/rufus-SD/maind/internal/store"
 
 	"github.com/spf13/cobra"
@@ -27,6 +30,8 @@ var (
 	recallTag     string
 	recallProject string
 	recallLimit   int
+	recallJSON    bool
+	recallBudget  int
 )
 
 func init() {
@@ -34,6 +39,8 @@ func init() {
 	recallCmd.Flags().StringVar(&recallTag, "tag", "", "filter by tag")
 	recallCmd.Flags().StringVarP(&recallProject, "project", "p", "", "filter by project")
 	recallCmd.Flags().IntVarP(&recallLimit, "limit", "n", 20, "max results")
+	recallCmd.Flags().BoolVar(&recallJSON, "json", false, "output full results as JSON (for tools)")
+	recallCmd.Flags().IntVar(&recallBudget, "budget", 0, "with --json, cap results to ~N tokens of content")
 }
 
 func runRecall(cmd *cobra.Command, args []string) error {
@@ -54,6 +61,15 @@ func runRecall(cmd *cobra.Command, args []string) error {
 	}
 
 	s.LogActivity("RECALL", fmt.Sprintf("%q → %d found", args[0], len(entries)), "")
+
+	if recallJSON {
+		if recallBudget > 0 {
+			entries = trimToTokenBudget(entries, recallBudget)
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(entries)
+	}
 
 	if len(entries) == 0 {
 		fmt.Println("No memories found.")
@@ -79,4 +95,29 @@ func runRecall(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// trimToTokenBudget keeps entries (in order) until the estimated token cost of
+// their content exceeds budget. At least one entry is always returned so a tiny
+// budget never yields an empty result for a matching query.
+func trimToTokenBudget(entries []model.Entry, budget int) []model.Entry {
+	var out []model.Entry
+	used := 0
+	for _, e := range entries {
+		cost := estimateTokens(e.Body) + estimateTokens(e.Title) + estimateTokens(strings.Join(e.Tags, " "))
+		if used+cost > budget && len(out) > 0 {
+			break
+		}
+		out = append(out, e)
+		used += cost
+	}
+	return out
+}
+
+// estimateTokens approximates token count at ~4 characters per token.
+func estimateTokens(s string) int {
+	if s == "" {
+		return 0
+	}
+	return (len(s) + 3) / 4
 }

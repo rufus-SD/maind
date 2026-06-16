@@ -44,6 +44,11 @@ func (s *Store) DB() *sql.DB {
 	return s.db
 }
 
+// Encrypted reports whether this brain has encryption enabled.
+func (s *Store) Encrypted() bool {
+	return s.cfg != nil && s.cfg.EncryptionEnabled
+}
+
 func (s *Store) Migrate() error {
 	_, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 		version INTEGER PRIMARY KEY,

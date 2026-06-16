@@ -30,6 +30,11 @@ func runExport(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("export: %w", err)
 	}
 
+	if s.Encrypted() {
+		fmt.Fprintln(os.Stderr, "  ⚠ This export contains DECRYPTED plaintext of your memories.")
+		fmt.Fprintln(os.Stderr, "    Store it securely (encrypted volume) and delete it when done.")
+	}
+
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(data)

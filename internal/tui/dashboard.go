@@ -47,6 +47,11 @@ var (
 			Foreground(lipgloss.Color("241"))
 )
 
+const (
+	idleLockTimeout        = 15 * time.Minute
+	sessionRefreshInterval = 60 * time.Second
+)
+
 type tickMsg time.Time
 type activityMsg []store.Activity
 type statsMsg store.Stats
@@ -64,6 +69,13 @@ type Model struct {
 	ready      bool
 	quitting   bool
 	lastActID  int
+
+	lastActivity   time.Time
+	lastRefresh    time.Time
+	lockReason     string
+	sessionValid   func() bool
+	refreshSession func() error
+	lockSession    func() error
 }
 
 func NewModel(s *store.Store, name string, encrypted bool) Model {
@@ -74,11 +86,29 @@ func NewModel(s *store.Store, name string, encrypted bool) Model {
 	ti.PromptStyle = promptStyle
 
 	return Model{
-		store:     s,
-		name:      name,
-		encrypted: encrypted,
-		input:     ti,
+		store:        s,
+		name:         name,
+		encrypted:    encrypted,
+		input:        ti,
+		lastActivity: time.Now(),
 	}
+}
+
+// WithSessionHooks wires the dashboard to the session lifecycle so it can keep the
+// session alive while you work, honor an external lock, and auto-lock when idle.
+//   - valid:   reports whether the session file is present and unexpired
+//   - refresh: extends the session expiry (keep-alive)
+//   - lock:    clears the session (used on idle auto-lock)
+func (m Model) WithSessionHooks(valid func() bool, refresh, lock func() error) Model {
+	m.sessionValid = valid
+	m.refreshSession = refresh
+	m.lockSession = lock
+	return m
+}
+
+// LockReason reports why the dashboard exited: "idle", "locked", or "" for a normal quit.
+func (m Model) LockReason() string {
+	return m.lockReason
 }
 
 func (m Model) Init() tea.Cmd {
@@ -102,6 +132,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		m.lastActivity = time.Now()
 		switch msg.Type {
 		case tea.KeyCtrlC:
 			m.quitting = true
@@ -119,6 +150,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tickMsg:
+		// Session lifecycle: the session file is the single source of truth for
+		// "am I unlocked", so the dashboard can never look open while really locked.
+		if m.encrypted {
+			now := time.Now()
+			switch {
+			case now.Sub(m.lastActivity) >= idleLockTimeout:
+				// Idle too long — auto-lock and leave.
+				if m.lockSession != nil {
+					m.lockSession()
+				}
+				m.lockReason = "idle"
+				m.quitting = true
+				return m, tea.Quit
+			case m.sessionValid != nil && !m.sessionValid():
+				// Locked or expired elsewhere (e.g. `maind lock`) — leave to match reality.
+				m.lockReason = "locked"
+				m.quitting = true
+				return m, tea.Quit
+			case m.refreshSession != nil && now.Sub(m.lastRefresh) >= sessionRefreshInterval:
+				// Active use — keep the session alive so external commands don't
+				// spuriously expire mid-work.
+				m.refreshSession()
+				m.lastRefresh = now
+			}
+		}
 		if acts, err := m.store.RecentActivity(30); err == nil {
 			m.activities = acts
 		}

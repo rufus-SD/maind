@@ -57,6 +57,7 @@ func init() {
 	rootCmd.AddCommand(ingestCmd)
 	rootCmd.AddCommand(unlockCmd)
 	rootCmd.AddCommand(lockCmd)
+	rootCmd.AddCommand(passwdCmd)
 	rootCmd.AddCommand(scanCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(shellCmd)
@@ -233,14 +234,33 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	}()
 
 	m := tui.NewModel(s, cfg.Name, cfg.EncryptionEnabled)
+	if cfg.EncryptionEnabled {
+		m = m.WithSessionHooks(
+			func() bool { _, err := readSessionKey(); return err == nil },
+			func() error { return writeSessionKey(key) },
+			func() error { return os.Remove(sessionKeyPath()) },
+		)
+	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
-	if _, err := p.Run(); err != nil {
+	finalModel, err := p.Run()
+	if err != nil {
 		return fmt.Errorf("dashboard: %w", err)
 	}
 
 	s.LogActivity("SESSION", "Dashboard closed", "")
-	fmt.Fprintln(os.Stderr, "  Locked. Bye.")
+	reason := ""
+	if fm, ok := finalModel.(tui.Model); ok {
+		reason = fm.LockReason()
+	}
+	switch reason {
+	case "idle":
+		fmt.Fprintln(os.Stderr, "  Auto-locked after 15 min of inactivity. Bye.")
+	case "locked":
+		fmt.Fprintln(os.Stderr, "  Session locked elsewhere. Bye.")
+	default:
+		fmt.Fprintln(os.Stderr, "  Locked. Bye.")
+	}
 	return nil
 }
 
