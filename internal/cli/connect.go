@@ -228,9 +228,10 @@ This contains your recent memories from past sessions. Read it before anything e
 
 ## Check the session is unlocked
 
-Maind auto-locks after 15 minutes of inactivity, when you exit the dashboard, or
-when the session expires. Before relying on memory — and whenever a maind command
-reports an error — verify the session:
+Maind auto-locks after 15 minutes of inactivity (no dashboard input and no
+maind CLI use from your IDE), when you exit the dashboard, or when the session
+expires. Before relying on memory — and whenever a maind command reports an
+error — verify the session:
 
 ` + "```bash" + `
 maind status

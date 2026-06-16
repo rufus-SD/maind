@@ -92,6 +92,9 @@ func openStore() (*storemod.Store, error) {
 		s.Close()
 		return nil, fmt.Errorf("migration failed: %w", err)
 	}
+	if cfg.EncryptionEnabled {
+		_ = touchSessionActivity()
+	}
 	return s, nil
 }
 
@@ -237,8 +240,10 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	if cfg.EncryptionEnabled {
 		m = m.WithSessionHooks(
 			func() bool { _, err := readSessionKey(); return err == nil },
-			func() error { return writeSessionKey(key) },
+			func() error { return refreshSessionKey(key) },
 			func() error { return os.Remove(sessionKeyPath()) },
+			sessionIdleSince,
+			touchSessionActivity,
 		)
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen())

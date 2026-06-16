@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rufus-SD/maind/internal/config"
@@ -108,11 +109,81 @@ func sessionKeyPath() string {
 
 func writeSessionKey(key []byte) error {
 	path := sessionKeyPath()
-	content := fmt.Sprintf("%d\n%s",
-		time.Now().Add(12*time.Hour).Unix(),
+	now := time.Now()
+	content := fmt.Sprintf("%d\n%s\n%d",
+		now.Add(12*time.Hour).Unix(),
 		base64.StdEncoding.EncodeToString(key),
+		now.Unix(),
 	)
 	return os.WriteFile(path, []byte(content), 0600)
+}
+
+// refreshSessionKey extends the 12-hour session expiry without bumping the idle
+// timer — only real use (CLI commands, dashboard keys) should reset inactivity.
+func refreshSessionKey(key []byte) error {
+	path := sessionKeyPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return writeSessionKey(key)
+	}
+	lines := splitLines(string(data))
+	if len(lines) < 2 {
+		return writeSessionKey(key)
+	}
+	lines[0] = fmt.Sprintf("%d", time.Now().Add(12*time.Hour).Unix())
+	if len(lines) < 3 {
+		lines = append(lines, fmt.Sprintf("%d", time.Now().Unix()))
+	}
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0600)
+}
+
+// touchSessionActivity bumps the idle timer — call on any successful maind use
+// (dashboard keys, remember, recall, etc.) so inactivity reflects brain use, not
+// just typing in the TUI.
+func touchSessionActivity() error {
+	path := sessionKeyPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := splitLines(string(data))
+	if len(lines) < 2 {
+		return fmt.Errorf("invalid session file")
+	}
+	if len(lines) >= 3 {
+		lines[2] = fmt.Sprintf("%d", time.Now().Unix())
+	} else {
+		lines = append(lines, fmt.Sprintf("%d", time.Now().Unix()))
+	}
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0600)
+}
+
+// sessionIdleSince returns how long since the last recorded activity.
+// Activity is updated by the dashboard and by external CLI commands.
+func sessionIdleSince() (time.Duration, error) {
+	path := sessionKeyPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	lines := splitLines(string(data))
+	if len(lines) < 2 {
+		return 0, fmt.Errorf("invalid session file")
+	}
+
+	var lastActive time.Time
+	if len(lines) >= 3 {
+		ts, err := strconv.ParseInt(lines[2], 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("invalid activity timestamp")
+		}
+		lastActive = time.Unix(ts, 0)
+	} else {
+		// Legacy 2-line session files: treat as just refreshed.
+		lastActive = time.Now()
+	}
+
+	return time.Since(lastActive), nil
 }
 
 func readSessionKey() ([]byte, error) {

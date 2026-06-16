@@ -76,6 +76,8 @@ type Model struct {
 	sessionValid   func() bool
 	refreshSession func() error
 	lockSession    func() error
+	idleSince      func() (time.Duration, error)
+	touchActivity  func() error
 }
 
 func NewModel(s *store.Store, name string, encrypted bool) Model {
@@ -96,13 +98,17 @@ func NewModel(s *store.Store, name string, encrypted bool) Model {
 
 // WithSessionHooks wires the dashboard to the session lifecycle so it can keep the
 // session alive while you work, honor an external lock, and auto-lock when idle.
-//   - valid:   reports whether the session file is present and unexpired
-//   - refresh: extends the session expiry (keep-alive)
-//   - lock:    clears the session (used on idle auto-lock)
-func (m Model) WithSessionHooks(valid func() bool, refresh, lock func() error) Model {
+//   - valid:         reports whether the session file is present and unexpired
+//   - refresh:       extends the session expiry (keep-alive)
+//   - lock:          clears the session (used on idle auto-lock)
+//   - idleSince:     time since last activity (dashboard OR external CLI use)
+//   - touchActivity: bump the idle timer (dashboard keyboard input)
+func (m Model) WithSessionHooks(valid func() bool, refresh, lock func() error, idleSince func() (time.Duration, error), touchActivity func() error) Model {
 	m.sessionValid = valid
 	m.refreshSession = refresh
 	m.lockSession = lock
+	m.idleSince = idleSince
+	m.touchActivity = touchActivity
 	return m
 }
 
@@ -133,6 +139,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		m.lastActivity = time.Now()
+		if m.touchActivity != nil {
+			m.touchActivity()
+		}
 		switch msg.Type {
 		case tea.KeyCtrlC:
 			m.quitting = true
@@ -154,8 +163,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// "am I unlocked", so the dashboard can never look open while really locked.
 		if m.encrypted {
 			now := time.Now()
+			idle := now.Sub(m.lastActivity)
+			if m.idleSince != nil {
+				if d, err := m.idleSince(); err == nil {
+					idle = d
+				}
+			}
 			switch {
-			case now.Sub(m.lastActivity) >= idleLockTimeout:
+			case idle >= idleLockTimeout:
 				// Idle too long — auto-lock and leave.
 				if m.lockSession != nil {
 					m.lockSession()
