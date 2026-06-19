@@ -260,7 +260,7 @@ func runDashboard(cmd *cobra.Command, args []string) error {
 	}
 	switch reason {
 	case "idle":
-		fmt.Fprintln(os.Stderr, "  Auto-locked after 15 min of inactivity. Bye.")
+		fmt.Fprintln(os.Stderr, "  Auto-locked after 2 hours of inactivity. Bye.")
 	case "locked":
 		fmt.Fprintln(os.Stderr, "  Session locked elsewhere. Bye.")
 	default:

@@ -48,7 +48,7 @@ var (
 )
 
 const (
-	idleLockTimeout        = 15 * time.Minute
+	idleLockTimeout        = 2 * time.Hour
 	sessionRefreshInterval = 60 * time.Second
 )
 
