@@ -32,7 +32,7 @@ searched by decrypting candidates in memory at query time.
 If you discover a security issue, please report it responsibly:
 
 1. **Do not** open a public GitHub issue
-2. Email **[TODO: add contact email]** with details
+2. Reach out via LinkedIn — [Arthur G.](https://www.linkedin.com/in/arthur--g/) — with details
 3. Include steps to reproduce if possible
 
 You will receive a response within 48 hours. We will coordinate a fix and disclosure timeline with you.
