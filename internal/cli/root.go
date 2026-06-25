@@ -68,7 +68,7 @@ func resolveDataDir() string {
 	if flagDataDir != "" {
 		return flagDataDir
 	}
-	return config.DefaultDataDir()
+	return config.FindDataDir()
 }
 
 func openStore() (*storemod.Store, error) {
