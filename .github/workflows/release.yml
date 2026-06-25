@@ -21,6 +21,10 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
 
     steps:
       - uses: actions/checkout@v5
@@ -30,21 +34,30 @@ jobs:
           go-version-file: go.mod
 
       - name: Build
+        shell: bash
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
           VERSION=${GITHUB_REF_NAME}
-          BINARY=maind-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}
+          BINARY=maind-${VERSION}-${GOOS}-${GOARCH}
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
           mkdir -p dist/${BINARY}
           go build -ldflags "-s -w -X github.com/rufus-SD/maind/internal/cli.Version=${VERSION}" \
-            -o dist/${BINARY}/maind .
-          tar -czf dist/${BINARY}.tar.gz -C dist ${BINARY}/
+            -o dist/${BINARY}/maind${EXT} .
+          if [ "$GOOS" = "windows" ]; then
+            (cd dist && zip -r ${BINARY}.zip ${BINARY}/)
+          else
+            tar -czf dist/${BINARY}.tar.gz -C dist ${BINARY}/
+          fi
 
       - uses: actions/upload-artifact@v7
         with:
           name: maind-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
 
   release:
     needs: build
@@ -58,7 +71,7 @@ jobs:
       - name: Checksums
         run: |
           cd artifacts
-          shasum -a 256 *.tar.gz > checksums.txt
+          shasum -a 256 *.tar.gz *.zip > checksums.txt
 
       - uses: softprops/action-gh-release@v2
         with:
